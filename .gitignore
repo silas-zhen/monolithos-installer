@@ -1,0 +1,16 @@
+# Build
+main.js
+*.js.map
+
+# npm
+node_modules/
+package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,11 @@
+{
+    "id": "monolithos-installer",
+    "name": "Monolithos Installer",
+    "version": "1.0.0",
+    "minAppVersion": "1.0.0",
+    "description": "Official installer for Monolithos - The Executive Life Operating System. Verifies your license and installs the complete Monolithos plugin package.",
+    "author": "Monolithos LLC",
+    "authorUrl": "https://monolithos.ai",
+    "fundingUrl": "https://monolithos.ai",
+    "isDesktopOnly": false
+}
