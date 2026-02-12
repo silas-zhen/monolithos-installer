@@ -37,6 +37,16 @@ const DEFAULT_SETTINGS: MonolithosInstallerSettings = {
     installedVersion: ''
 };
 
+interface AppearanceConfig {
+    enabledCssSnippets?: string[];
+    [key: string]: unknown;
+}
+
+interface JSZipEntry {
+    dir: boolean;
+    async(type: 'arraybuffer'): Promise<ArrayBuffer>;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN PLUGIN CLASS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -45,7 +55,7 @@ export default class MonolithosInstaller extends Plugin {
     settings: MonolithosInstallerSettings;
 
     async onload() {
-        console.log('🏛️ Monolithos Installer: Loading...');
+        console.debug('Monolithos Installer: loading');
         
         await this.loadSettings();
         
@@ -53,20 +63,20 @@ export default class MonolithosInstaller extends Plugin {
         this.addSettingTab(new MonolithosInstallerSettingTab(this.app, this));
         
         // Add ribbon icon
-        this.addRibbonIcon('download', 'Monolithos Installer', () => {
+        this.addRibbonIcon('download', 'Install Monolithos', () => {
             new InstallModal(this.app, this).open();
         });
         
         // Add command
         this.addCommand({
-            id: 'open-monolithos-installer',
-            name: 'Open Monolithos Installer',
+            id: 'open-installer',
+            name: 'Open installer',
             callback: () => {
                 new InstallModal(this.app, this).open();
             }
         });
         
-        console.log('🏛️ Monolithos Installer: Ready!');
+        console.debug('Monolithos Installer: ready');
     }
 
     async loadSettings() {
@@ -109,11 +119,12 @@ export default class MonolithosInstaller extends Plugin {
      */
     async installMonolithos(onProgress: (status: string) => void): Promise<boolean> {
         const adapter = this.app.vault.adapter;
+        const configDir = this.app.vault.configDir;
         
         try {
             // 1. Download ZIP
             onProgress('Downloading Monolithos...');
-            console.log('[Installer] Downloading from:', PLUGIN_DOWNLOAD_URL);
+            console.debug('[Installer] Downloading from:', PLUGIN_DOWNLOAD_URL);
             
             const response = await requestUrl({
                 url: PLUGIN_DOWNLOAD_URL,
@@ -121,7 +132,7 @@ export default class MonolithosInstaller extends Plugin {
             });
             
             const zipData = response.arrayBuffer;
-            console.log('[Installer] Downloaded:', zipData.byteLength, 'bytes');
+            console.debug('[Installer] Downloaded:', zipData.byteLength, 'bytes');
 
             // 2. Unzip
             onProgress('Extracting files...');
@@ -131,13 +142,14 @@ export default class MonolithosInstaller extends Plugin {
             const files: { path: string; content: ArrayBuffer }[] = [];
             
             for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
-                if (!(zipEntry as any).dir) {
-                    const content = await (zipEntry as any).async('arraybuffer');
+                const entry = zipEntry as JSZipEntry;
+                if (!entry.dir) {
+                    const content = await entry.async('arraybuffer');
                     files.push({ path: relativePath, content });
                 }
             }
             
-            console.log('[Installer] Files to install:', files.length);
+            console.debug('[Installer] Files to install:', files.length);
 
             // 4. Write files
             onProgress('Installing files...');
@@ -147,13 +159,13 @@ export default class MonolithosInstaller extends Plugin {
                 
                 // Determine target path based on file location in zip
                 if (file.path.includes('plugins/monolithos/')) {
-                    // Plugin files → .obsidian/plugins/monolithos/
+                    // Plugin files → <configDir>/plugins/monolithos/
                     const fileName = file.path.substring(file.path.indexOf('plugins/monolithos/'));
-                    targetPath = `.obsidian/${fileName}`;
+                    targetPath = `${configDir}/${fileName}`;
                 } else if (file.path.includes('snippets/')) {
-                    // CSS snippets → .obsidian/snippets/
+                    // CSS snippets → <configDir>/snippets/
                     const fileName = file.path.substring(file.path.indexOf('snippets/'));
-                    targetPath = `.obsidian/${fileName}`;
+                    targetPath = `${configDir}/${fileName}`;
                 } else {
                     // Skip unknown files
                     continue;
@@ -167,7 +179,7 @@ export default class MonolithosInstaller extends Plugin {
                 
                 // Write file
                 await adapter.writeBinary(targetPath, file.content);
-                console.log('[Installer] Written:', targetPath);
+                console.debug('[Installer] Written:', targetPath);
             }
 
             // 5. Enable CSS snippets in appearance.json
@@ -194,24 +206,28 @@ export default class MonolithosInstaller extends Plugin {
      */
     async enableSnippets(): Promise<void> {
         const adapter = this.app.vault.adapter;
-        const appearancePath = '.obsidian/appearance.json';
+        const configDir = this.app.vault.configDir;
+        const appearancePath = `${configDir}/appearance.json`;
         
         try {
-            let appearance: any = {};
+            let appearance: AppearanceConfig = {};
             
             // Read existing appearance.json if it exists
             if (await adapter.exists(appearancePath)) {
                 const content = await adapter.read(appearancePath);
-                appearance = JSON.parse(content);
+                appearance = JSON.parse(content) as AppearanceConfig;
             }
             
             // Get list of installed snippets
-            const snippetsPath = '.obsidian/snippets';
+            const snippetsPath = `${configDir}/snippets`;
             if (await adapter.exists(snippetsPath)) {
                 const snippetFiles = await adapter.list(snippetsPath);
                 const snippetNames = snippetFiles.files
-                    .filter(f => f.endsWith('.css'))
-                    .map(f => f.replace('.obsidian/snippets/', '').replace('.css', ''));
+                    .filter((f: string) => f.endsWith('.css'))
+                    .map((f: string) => {
+                        const parts = f.split('/');
+                        return parts[parts.length - 1].replace('.css', '');
+                    });
                 
                 // Enable all Monolithos snippets
                 if (!appearance.enabledCssSnippets) {
@@ -230,7 +246,7 @@ export default class MonolithosInstaller extends Plugin {
                 
                 // Write updated appearance.json
                 await adapter.write(appearancePath, JSON.stringify(appearance, null, 2));
-                console.log('[Installer] Enabled snippets:', appearance.enabledCssSnippets);
+                console.debug('[Installer] Enabled snippets:', appearance.enabledCssSnippets);
             }
         } catch (error) {
             console.error('[Installer] Could not enable snippets:', error);
@@ -258,7 +274,7 @@ class InstallModal extends Modal {
         contentEl.addClass('monolithos-installer-modal');
 
         // Header
-        contentEl.createEl('h2', { text: '🏛️ Monolithos Installer' });
+        contentEl.createEl('h2', { text: 'Monolithos installer' });
         
         // Description
         contentEl.createEl('p', { 
@@ -282,7 +298,7 @@ class InstallModal extends Modal {
         const buttonContainer = contentEl.createDiv({ cls: 'installer-buttons' });
         
         const installBtn = buttonContainer.createEl('button', {
-            text: 'Verify & Install',
+            text: 'Verify & install',
             cls: 'installer-btn-primary'
         });
         
@@ -291,65 +307,9 @@ class InstallModal extends Modal {
             cls: 'installer-btn-secondary'
         });
 
-        // Install handler
-        installBtn.addEventListener('click', async () => {
-            if (this.isInstalling) return;
-            
-            const licenseKey = input.value.trim();
-            if (!licenseKey) {
-                statusEl.textContent = '❌ Please enter a license key';
-                statusEl.className = 'installer-status error';
-                return;
-            }
-
-            this.isInstalling = true;
-            installBtn.disabled = true;
-            installBtn.textContent = 'Verifying...';
-            statusEl.textContent = '⏳ Verifying license...';
-            statusEl.className = 'installer-status';
-
-            // Step 1: Verify license
-            const result = await this.plugin.verifyLicense(licenseKey);
-            
-            if (!result.valid) {
-                statusEl.textContent = `❌ ${result.error}`;
-                statusEl.className = 'installer-status error';
-                installBtn.disabled = false;
-                installBtn.textContent = 'Verify & Install';
-                this.isInstalling = false;
-                return;
-            }
-
-            // Save license key
-            this.plugin.settings.licenseKey = licenseKey;
-            await this.plugin.saveSettings();
-
-            statusEl.textContent = `✅ License valid! Tier: ${result.tier}`;
-            installBtn.textContent = 'Installing...';
-
-            // Step 2: Install
-            try {
-                await this.plugin.installMonolithos((status) => {
-                    statusEl.textContent = `⏳ ${status}`;
-                });
-
-                statusEl.textContent = '✅ Installation complete!';
-                statusEl.className = 'installer-status success';
-                installBtn.textContent = 'Done!';
-                
-                // Show success message
-                setTimeout(() => {
-                    this.close();
-                    new Notice('🏛️ Monolithos installed! Please enable it in Settings → Community Plugins');
-                }, 1500);
-
-            } catch (error) {
-                statusEl.textContent = `❌ Installation failed: ${error.message}`;
-                statusEl.className = 'installer-status error';
-                installBtn.disabled = false;
-                installBtn.textContent = 'Retry';
-                this.isInstalling = false;
-            }
+        // Install handler — wrap async in void to satisfy void return expectation
+        installBtn.addEventListener('click', () => {
+            void this.handleInstall(input, statusEl, installBtn);
         });
 
         // Cancel handler
@@ -358,77 +318,74 @@ class InstallModal extends Modal {
                 this.close();
             }
         });
+    }
 
-        // Styles
-        const style = contentEl.createEl('style');
-        style.textContent = `
-            .monolithos-installer-modal {
-                padding: 20px;
-                max-width: 400px;
-            }
-            .monolithos-installer-modal h2 {
-                margin: 0 0 16px 0;
-                font-size: 20px;
-            }
-            .installer-description {
-                color: var(--text-muted);
-                margin-bottom: 20px;
-            }
-            .installer-input-container {
-                margin-bottom: 16px;
-            }
-            .installer-input {
-                width: 100%;
-                padding: 10px 12px;
-                font-family: monospace;
-                font-size: 14px;
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 4px;
-                background: var(--background-primary);
-                color: var(--text-normal);
-            }
-            .installer-input:focus {
-                outline: none;
-                border-color: var(--interactive-accent);
-            }
-            .installer-status {
-                min-height: 24px;
-                margin-bottom: 16px;
-                font-size: 14px;
-            }
-            .installer-status.error {
-                color: var(--text-error);
-            }
-            .installer-status.success {
-                color: var(--text-success);
-            }
-            .installer-buttons {
-                display: flex;
-                gap: 10px;
-                justify-content: flex-end;
-            }
-            .installer-btn-primary {
-                background: var(--interactive-accent);
-                color: var(--text-on-accent);
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-weight: 500;
-            }
-            .installer-btn-primary:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-            .installer-btn-secondary {
-                background: transparent;
-                color: var(--text-muted);
-                border: 1px solid var(--background-modifier-border);
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-        `;
+    /**
+     * Handle the install flow (verify + install)
+     */
+    private async handleInstall(
+        input: HTMLInputElement,
+        statusEl: HTMLElement,
+        installBtn: HTMLButtonElement
+    ): Promise<void> {
+        if (this.isInstalling) return;
+
+        const licenseKey = input.value.trim();
+        if (!licenseKey) {
+            statusEl.textContent = 'Please enter a license key';
+            statusEl.className = 'installer-status error';
+            return;
+        }
+
+        this.isInstalling = true;
+        installBtn.disabled = true;
+        installBtn.textContent = 'Verifying...';
+        statusEl.textContent = 'Verifying license...';
+        statusEl.className = 'installer-status';
+
+        // Step 1: Verify license
+        const result = await this.plugin.verifyLicense(licenseKey);
+
+        if (!result.valid) {
+            statusEl.textContent = result.error ?? 'Verification failed';
+            statusEl.className = 'installer-status error';
+            installBtn.disabled = false;
+            installBtn.textContent = 'Verify & install';
+            this.isInstalling = false;
+            return;
+        }
+
+        // Save license key
+        this.plugin.settings.licenseKey = licenseKey;
+        await this.plugin.saveSettings();
+
+        statusEl.textContent = `License valid! Tier: ${result.tier}`;
+        installBtn.textContent = 'Installing...';
+
+        // Step 2: Install
+        try {
+            await this.plugin.installMonolithos((status) => {
+                statusEl.textContent = status;
+            });
+
+            statusEl.textContent = 'Installation complete!';
+            statusEl.className = 'installer-status success';
+            installBtn.textContent = 'Done!';
+
+            // Show success message
+            setTimeout(() => {
+                this.close();
+                new Notice('Monolithos installed successfully. Please enable it in Settings → Community plugins.');
+            }, 1500);
+
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            statusEl.textContent = `Installation failed: ${msg}`;
+            statusEl.className = 'installer-status error';
+            installBtn.disabled = false;
+            installBtn.textContent = 'Retry';
+            this.isInstalling = false;
+        }
     }
 
     onClose() {
@@ -453,14 +410,14 @@ class MonolithosInstallerSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Monolithos Installer' });
+        new Setting(containerEl).setName('Monolithos installer').setHeading();
 
         // Status
         new Setting(containerEl)
-            .setName('Installation Status')
+            .setName('Installation status')
             .setDesc(this.plugin.settings.installed 
-                ? `✅ Monolithos v${this.plugin.settings.installedVersion} installed` 
-                : '❌ Not installed')
+                ? `Monolithos v${this.plugin.settings.installedVersion} installed` 
+                : 'Not installed')
             .addButton(button => button
                 .setButtonText(this.plugin.settings.installed ? 'Reinstall' : 'Install')
                 .onClick(() => {
@@ -470,7 +427,7 @@ class MonolithosInstallerSettingTab extends PluginSettingTab {
         // License key (hidden)
         if (this.plugin.settings.licenseKey) {
             new Setting(containerEl)
-                .setName('License Key')
+                .setName('License key')
                 .setDesc('Your license key is saved')
                 .addButton(button => button
                     .setButtonText('Clear')
@@ -482,7 +439,7 @@ class MonolithosInstallerSettingTab extends PluginSettingTab {
         }
 
         // Help
-        containerEl.createEl('h3', { text: 'Need Help?' });
+        new Setting(containerEl).setName('Need help?').setHeading();
         containerEl.createEl('p', { text: 'Visit monolithos.ai for documentation and support.' });
     }
 }

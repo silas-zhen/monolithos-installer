@@ -1,0 +1,82 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MONOLITHOS INSTALLER - Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.monolithos-installer-modal {
+    padding: 20px;
+    max-width: 400px;
+}
+
+.monolithos-installer-modal h2 {
+    margin: 0 0 16px 0;
+    font-size: 20px;
+}
+
+.installer-description {
+    color: var(--text-muted);
+    margin-bottom: 20px;
+}
+
+.installer-input-container {
+    margin-bottom: 16px;
+}
+
+.installer-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: monospace;
+    font-size: 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+}
+
+.installer-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}
+
+.installer-status {
+    min-height: 24px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.installer-status.error {
+    color: var(--text-error);
+}
+
+.installer-status.success {
+    color: var(--text-success);
+}
+
+.installer-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.installer-btn-primary {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.installer-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.installer-btn-secondary {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--background-modifier-border);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
