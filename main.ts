@@ -63,7 +63,7 @@ export default class MonolithosInstaller extends Plugin {
         this.addSettingTab(new MonolithosInstallerSettingTab(this.app, this));
         
         // Add ribbon icon
-        this.addRibbonIcon('download', 'Install Monolithos', () => {
+        this.addRibbonIcon('download', 'Open installer', () => {
             new InstallModal(this.app, this).open();
         });
         
@@ -278,7 +278,7 @@ class InstallModal extends Modal {
         
         // Description
         contentEl.createEl('p', { 
-            text: 'Enter your license key to install the complete Monolithos system.',
+            text: 'Enter your license key to install the complete system.',
             cls: 'installer-description'
         });
 
@@ -375,7 +375,7 @@ class InstallModal extends Modal {
             // Show success message
             setTimeout(() => {
                 this.close();
-                new Notice('Monolithos installed successfully. Please enable it in Settings → Community plugins.');
+                new Notice('Installation complete. Please enable the plugin in settings → community plugins.');
             }, 1500);
 
         } catch (error) {
@@ -410,7 +410,7 @@ class MonolithosInstallerSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        new Setting(containerEl).setName('Monolithos installer').setHeading();
+        new Setting(containerEl).setName('Settings').setHeading();
 
         // Status
         new Setting(containerEl)
