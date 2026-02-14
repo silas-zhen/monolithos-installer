@@ -410,7 +410,7 @@ class MonolithosInstallerSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        new Setting(containerEl).setName('General').setHeading();
+        new Setting(containerEl).setName('License & installation').setHeading();
 
         // Status
         new Setting(containerEl)
